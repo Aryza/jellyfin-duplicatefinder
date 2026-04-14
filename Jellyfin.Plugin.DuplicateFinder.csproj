@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <AssemblyName>Jellyfin.Plugin.DuplicateFinder</AssemblyName>
+    <RootNamespace>Jellyfin.Plugin.DuplicateFinder</RootNamespace>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Version>1.0.2</Version>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Jellyfin 10.11.x targets net9.0 -->
+    <PackageReference Include="Jellyfin.Controller" Version="10.11.*" />
+    <PackageReference Include="Jellyfin.Model" Version="10.11.*" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Embed the unified config/report page HTML as a resource served by Jellyfin -->
+    <EmbeddedResource Include="Configuration\configPage.html" />
+  </ItemGroup>
+
+</Project>

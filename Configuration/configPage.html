@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><title>Duplicate Finder</title></head>
+<body>
+<div id="DuplicateFinderConfigPage" data-role="page" class="page libraryPage noSecondaryNavPage"
+     data-require="emby-checkbox,emby-button,emby-input">
+    <div data-role="content">
+        <div class="content-primary">
+
+            <style>
+                .df-tabs {
+                    display: flex; gap: 4px;
+                    border-bottom: 1px solid rgba(255,255,255,0.12);
+                    margin-bottom: 1.5em;
+                }
+                .df-tab {
+                    padding: 10px 20px; background: none; border: none;
+                    color: inherit; cursor: pointer; font-size: 0.95em;
+                    border-bottom: 2px solid transparent;
+                    margin-bottom: -1px; opacity: 0.7;
+                }
+                .df-tab:hover { opacity: 1; }
+                .df-tab.active { opacity: 1; border-bottom-color: #00a4dc; }
+
+                .df-toolbar {
+                    display: flex; flex-wrap: wrap; gap: 10px;
+                    align-items: center; margin-bottom: 1.5em;
+                }
+                .df-toolbar input[type="text"] {
+                    padding: 6px 10px; border-radius: 3px;
+                    border: 1px solid rgba(255,255,255,0.15);
+                    background: rgba(255,255,255,0.05); color: inherit;
+                    font-size: 0.9em; min-width: 220px;
+                }
+                .df-toolbar select {
+                    padding: 6px 8px; border-radius: 3px;
+                    border: 1px solid rgba(255,255,255,0.15);
+                    background: rgba(30,30,30,0.95); color: inherit; font-size: 0.9em;
+                }
+                .df-toolbar button {
+                    padding: 6px 12px; border-radius: 3px;
+                    border: 1px solid rgba(255,255,255,0.2);
+                    background: rgba(255,255,255,0.07); color: inherit;
+                    font-size: 0.85em; cursor: pointer;
+                }
+                .df-toolbar button:hover { background: rgba(255,255,255,0.13); }
+                .df-meta { font-size: 0.85em; opacity: 0.6; margin-bottom: 1.2em; }
+                .df-group { border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; margin-bottom: 1em; overflow: hidden; }
+                .df-hdr {
+                    display: flex; justify-content: space-between; align-items: center;
+                    padding: 8px 14px; background: rgba(255,255,255,0.05); cursor: pointer;
+                }
+                .df-hdr:hover { background: rgba(255,255,255,0.09); }
+                .df-hdr-title { font-weight: 500; font-size: 0.95em; }
+                .df-hdr-meta  { display: flex; gap: 8px; align-items: center; font-size: 0.78em; }
+                .df-badge { padding: 2px 8px; border-radius: 10px; font-weight: 500; }
+                .b-prov { background: rgba(0,164,220,0.2); color: #7dd3fc; }
+                .b-titl { background: rgba(168,85,247,0.2); color: #d8b4fe; }
+                .b-both { background: rgba(16,185,129,0.2); color: #6ee7b7; }
+                .df-body { overflow-x: auto; }
+                .df-body.collapsed { display: none; }
+                .df-table { width: 100%; border-collapse: collapse; font-size: 0.85em; min-width: 580px; }
+                .df-table th {
+                    padding: 6px 12px; text-align: left; background: rgba(0,0,0,0.2);
+                    font-size: 0.78em; font-weight: 500; text-transform: uppercase;
+                    letter-spacing: 0.04em; opacity: 0.65; white-space: nowrap;
+                }
+                .df-table td { padding: 7px 12px; border-top: 1px solid rgba(255,255,255,0.05); vertical-align: top; }
+                .df-table tr.best td { background: rgba(0,164,220,0.06); }
+                .df-star  { color: #fbbf24; margin-right: 3px; }
+                .df-name  { font-weight: 500; word-break: break-all; }
+                .df-dir   { font-family: monospace; font-size: 0.8em; opacity: 0.5; word-break: break-all; }
+                .df-pill  { display: inline-block; padding: 1px 6px; border-radius: 3px; background: rgba(255,255,255,0.1); font-size: 0.85em; }
+                .df-ids   { font-size: 0.8em; opacity: 0.6; }
+                .df-empty { text-align: center; padding: 3em; opacity: 0.5; }
+                .df-load  { text-align: center; padding: 3em; opacity: 0.6; }
+                .df-err   { padding: 1em; color: #f87171; }
+                .df-pager { display: flex; gap: 6px; align-items: center; margin-top: 1.2em; flex-wrap: wrap; }
+                .df-pager button {
+                    padding: 4px 10px; border-radius: 3px;
+                    border: 1px solid rgba(255,255,255,0.15);
+                    background: rgba(255,255,255,0.05); color: inherit;
+                    cursor: pointer; font-size: 0.85em; min-width: 32px;
+                }
+                .df-pager button:disabled { opacity: 0.3; cursor: default; }
+                .df-pager button.cur { background: #00a4dc; border-color: #00a4dc; color: #fff; }
+                .df-pager .pinfo { font-size: 0.82em; opacity: 0.55; }
+            </style>
+
+            <div class="verticalSection">
+                <h2 class="sectionTitle">Duplicate Finder</h2>
+            </div>
+
+            <div class="df-tabs">
+                <button type="button" class="df-tab active" data-tab="settings">Settings &amp; Scan</button>
+                <button type="button" class="df-tab" data-tab="report">Report</button>
+            </div>
+
+            <!-- ═══════════════ Settings & Scan tab ═══════════════ -->
+            <div class="df-tab-panel" data-panel="settings">
+
+                <div class="verticalSection">
+                    <div class="inputContainer">
+                        <label class="inputLabel inputLabelUnfocused" for="txtThreshold">
+                            Fuzzy match threshold (0.80–1.00)
+                        </label>
+                        <input type="number" id="txtThreshold" class="emby-input"
+                               min="0.80" max="1.00" step="0.01" />
+                        <div class="fieldDescription">
+                            0.90 recommended. Higher = stricter (fewer false positives).
+                        </div>
+                    </div>
+                    <div class="checkboxContainer checkboxContainer-withDescription">
+                        <label class="emby-checkbox-label">
+                            <input type="checkbox" id="chkProviders" is="emby-checkbox" />
+                            <span>Match on provider IDs (TMDb / IMDB / MusicBrainz)</span>
+                        </label>
+                    </div>
+                    <div class="checkboxContainer checkboxContainer-withDescription">
+                        <label class="emby-checkbox-label">
+                            <input type="checkbox" id="chkTitle" is="emby-checkbox" />
+                            <span>Match on title + year (fuzzy)</span>
+                        </label>
+                    </div>
+                    <div class="checkboxContainer checkboxContainer-withDescription">
+                        <label class="emby-checkbox-label">
+                            <input type="checkbox" id="chkMovies" is="emby-checkbox" />
+                            <span>Scan movies</span>
+                        </label>
+                    </div>
+                    <div class="checkboxContainer checkboxContainer-withDescription">
+                        <label class="emby-checkbox-label">
+                            <input type="checkbox" id="chkEpisodes" is="emby-checkbox" />
+                            <span>Scan TV episodes</span>
+                        </label>
+                    </div>
+                    <div class="checkboxContainer checkboxContainer-withDescription">
+                        <label class="emby-checkbox-label">
+                            <input type="checkbox" id="chkMusic" is="emby-checkbox" />
+                            <span>Scan music tracks</span>
+                        </label>
+                    </div>
+                    <div class="checkboxContainer checkboxContainer-withDescription">
+                        <label class="emby-checkbox-label">
+                            <input type="checkbox" id="chkMediaInfo" is="emby-checkbox" />
+                            <span>Include media info (resolution, codec, bitrate) in report</span>
+                        </label>
+                    </div>
+                    <br />
+                    <button is="emby-button" type="button" class="raised button-submit" id="btnSave">
+                        <span>Save Settings</span>
+                    </button>
+                </div>
+
+                <div class="verticalSection">
+                    <h3 class="sectionTitle">Scan Library</h3>
+                    <p>The scan also runs automatically (Dashboard → Scheduled Tasks → Duplicate Finder).</p>
+                    <button is="emby-button" type="button" class="raised" id="btnScan">
+                        <span>Scan Now</span>
+                    </button>
+
+                    <div id="divProgress" style="display:none; margin-top:1.2em;">
+                        <p id="pPhase" style="margin:0 0 0.4em; font-size:0.9em;"></p>
+                        <div style="background:rgba(255,255,255,0.1); border-radius:3px; height:8px; overflow:hidden;">
+                            <div id="divBar" style="height:100%; width:0%; background:#00a4dc; transition:width 0.5s ease;"></div>
+                        </div>
+                        <p id="pFile"  style="margin:0.4em 0 0; font-size:0.8em; opacity:0.7; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"></p>
+                        <p id="pCount" style="margin:0.2em 0 0; font-size:0.75em; opacity:0.5;"></p>
+                    </div>
+
+                    <div id="divDone" style="display:none; margin-top:1em;">
+                        ✓ Scan complete — <a href="#" id="lnkViewReport">view report</a>
+                    </div>
+                </div>
+
+                <div class="verticalSection">
+                    <h3 class="sectionTitle">Last Scan</h3>
+                    <p id="pLastScan" style="opacity:0.7;">No scan results yet.</p>
+                </div>
+
+            </div>
+
+            <!-- ═══════════════ Report tab ═══════════════ -->
+            <div class="df-tab-panel" data-panel="report" style="display:none;">
+
+                <div id="dfLoad" class="df-load">Loading results…</div>
+                <div id="dfErr"  class="df-err" style="display:none;"></div>
+
+                <div id="dfMain" style="display:none;">
+                    <p class="df-meta" id="dfMeta"></p>
+
+                    <div class="df-toolbar">
+                        <input type="text" id="dfFilter" placeholder="Filter by title or file path…" />
+                        <select id="dfReason">
+                            <option value="">All match types</option>
+                            <option value="ProviderId">Provider ID</option>
+                            <option value="TitleAndYear">Title + year</option>
+                            <option value="Both">Both</option>
+                        </select>
+                        <select id="dfPageSize">
+                            <option value="25">25 per page</option>
+                            <option value="50" selected>50 per page</option>
+                            <option value="100">100 per page</option>
+                            <option value="0">All</option>
+                        </select>
+                        <button id="dfExpand">Expand all</button>
+                        <button id="dfCollapse">Collapse all</button>
+                    </div>
+
+                    <div id="dfGroups"></div>
+                    <div class="df-pager" id="dfPager"></div>
+                </div>
+
+            </div>
+
+        </div>
+    </div>
+
+<script type="text/javascript">
+(function () {
+    'use strict';
+    console.log('[DuplicateFinder] configPage.html script start');
+
+    // Constants used by the report renderer — declared at the top so they're
+    // always defined before any render function can run.
+    var BADGE_CLS  = { ProviderId: 'b-prov', TitleAndYear: 'b-titl', Both: 'b-both' };
+    var REASON_TXT = { ProviderId: 'Provider ID', TitleAndYear: 'Title + year', Both: 'ID + title' };
+    function badgeCls(r)  { return BADGE_CLS[r]  || 'b-prov'; }
+    function reasonTxt(r) { return REASON_TXT[r] || '?'; }
+
+    // Resolved at runtime from ApiClient.getPlugins() so we don't have to keep
+    // the hardcoded GUID in this file in sync with Plugin.cs.
+    var PLUGIN_ID  = null;
+    var pluginIdP  = null; // cached Promise
+    var pollTimer  = null;
+
+    function getPluginId() {
+        if (PLUGIN_ID) return Promise.resolve(PLUGIN_ID);
+        if (pluginIdP) return pluginIdP;
+        pluginIdP = apiGet('Plugins').then(function (plugins) {
+            var match = (plugins || []).find(function (p) {
+                return p && (p.Name === 'DuplicateFinder' || p.name === 'DuplicateFinder');
+            });
+            if (!match) throw new Error('DuplicateFinder plugin not found in ApiClient.getPlugins()');
+            PLUGIN_ID = match.Id || match.id;
+            return PLUGIN_ID;
+        });
+        return pluginIdP;
+    }
+
+    // Report state
+    var allGroups = [];
+    var filtered  = [];
+    var page      = 1;
+    var filterTimer = null;
+    var reportLoaded = false;
+
+    function apiGet(path) {
+        return ApiClient.ajax({ type: 'GET', url: ApiClient.getUrl(path), dataType: 'json' });
+    }
+    function apiPost(path) {
+        return ApiClient.ajax({ type: 'POST', url: ApiClient.getUrl(path) });
+    }
+
+    // ══════════ Page reference + helpers ══════════
+    var pageEl = document.getElementById('DuplicateFinderConfigPage');
+    console.log('[DuplicateFinder] pageEl =', pageEl);
+    if (!pageEl) {
+        console.error('[DuplicateFinder] page element #DuplicateFinderConfigPage not found — aborting script');
+        return;
+    }
+
+    // Resolve elements via pageEl, with a helpful error if missing.
+    function $(sel) {
+        var el = pageEl.querySelector(sel);
+        if (!el) console.warn('[DuplicateFinder] selector not found:', sel);
+        return el;
+    }
+
+    // ══════════ Tab switching ══════════
+    function showTab(name) {
+        pageEl.querySelectorAll('.df-tab').forEach(function (t) {
+            t.classList.toggle('active', t.getAttribute('data-tab') === name);
+        });
+        pageEl.querySelectorAll('.df-tab-panel').forEach(function (p) {
+            p.style.display = p.getAttribute('data-panel') === name ? '' : 'none';
+        });
+        if (name === 'report') loadReport();
+    }
+
+    // ══════════ Event delegation ══════════
+    // A single delegated click listener means the report tab link, Save, Scan,
+    // Expand/Collapse etc. all keep working even if Jellyfin re-renders the page.
+    pageEl.addEventListener('click', function (ev) {
+        var target = ev.target;
+
+        // Walk up looking for an element we care about (buttons contain spans).
+        var tab = target.closest && target.closest('.df-tab');
+        if (tab) { showTab(tab.getAttribute('data-tab')); return; }
+
+        if (target.closest && target.closest('#btnSave'))   { ev.preventDefault(); doSave();   return; }
+        if (target.closest && target.closest('#btnScan'))   { ev.preventDefault(); doScan();   return; }
+        if (target.closest && target.closest('#lnkViewReport')) {
+            ev.preventDefault(); reportLoaded = false; showTab('report'); return;
+        }
+        if (target.closest && target.closest('#dfExpand'))  {
+            pageEl.querySelectorAll('.df-body').forEach(function (b) { b.classList.remove('collapsed'); });
+            return;
+        }
+        if (target.closest && target.closest('#dfCollapse')) {
+            pageEl.querySelectorAll('.df-body').forEach(function (b) { b.classList.add('collapsed'); });
+            return;
+        }
+    });
+
+    pageEl.addEventListener('input', function (ev) {
+        if (ev.target && ev.target.id === 'dfFilter') {
+            clearTimeout(filterTimer);
+            filterTimer = setTimeout(applyFilter, 250);
+        }
+    });
+    pageEl.addEventListener('change', function (ev) {
+        if (!ev.target) return;
+        if (ev.target.id === 'dfReason')   { applyFilter(); return; }
+        if (ev.target.id === 'dfPageSize') { page = 1; render(); return; }
+    });
+
+    // ══════════ Load settings ══════════
+    function loadSettings() {
+        getPluginId().then(function (id) {
+            console.log('[DuplicateFinder] plugin id resolved:', id);
+            return ApiClient.getPluginConfiguration(id);
+        }).then(function (cfg) {
+            console.log('[DuplicateFinder] config loaded', cfg);
+            $('#txtThreshold').value   = cfg.FuzzyMatchThreshold !== undefined ? cfg.FuzzyMatchThreshold : 0.90;
+            $('#chkProviders').checked = cfg.MatchOnProviderIds  !== false;
+            $('#chkTitle').checked     = cfg.MatchOnTitleAndYear !== false;
+            $('#chkMovies').checked    = cfg.ScanMovies          !== false;
+            $('#chkEpisodes').checked  = cfg.ScanEpisodes        !== false;
+            $('#chkMusic').checked     = cfg.ScanMusic           !== false;
+            $('#chkMediaInfo').checked = cfg.IncludeMediaInfo    !== false;
+        }).catch(function (err) {
+            console.error('[DuplicateFinder] failed to load config', err);
+            Dashboard.alert('Failed to load configuration: ' + (err && err.message ? err.message : err));
+        });
+    }
+
+    // ══════════ Save settings ══════════
+    function doSave() {
+        console.log('[DuplicateFinder] Save Settings clicked');
+        var id;
+        getPluginId().then(function (pid) {
+            id = pid;
+            return ApiClient.getPluginConfiguration(id);
+        }).then(function (cfg) {
+            cfg.FuzzyMatchThreshold = parseFloat($('#txtThreshold').value);
+            cfg.MatchOnProviderIds  = $('#chkProviders').checked;
+            cfg.MatchOnTitleAndYear = $('#chkTitle').checked;
+            cfg.ScanMovies          = $('#chkMovies').checked;
+            cfg.ScanEpisodes        = $('#chkEpisodes').checked;
+            cfg.ScanMusic           = $('#chkMusic').checked;
+            cfg.IncludeMediaInfo    = $('#chkMediaInfo').checked;
+            console.log('[DuplicateFinder] POSTing updated config', cfg);
+            return ApiClient.updatePluginConfiguration(id, cfg);
+        }).then(function (result) {
+            console.log('[DuplicateFinder] save succeeded', result);
+            if (Dashboard.processPluginConfigurationUpdateResult) {
+                Dashboard.processPluginConfigurationUpdateResult(result);
+            } else {
+                Dashboard.alert('Settings saved.');
+            }
+        }).catch(function (err) {
+            console.error('[DuplicateFinder] save failed', err);
+            Dashboard.alert('Save failed: ' +
+                (err && err.status ? 'HTTP ' + err.status : (err && err.message ? err.message : String(err))));
+        });
+    }
+
+    // ══════════ Scan ══════════
+    function doScan() {
+        console.log('[DuplicateFinder] Scan Now clicked');
+        $('#btnScan').disabled          = true;
+        $('#divDone').style.display     = 'none';
+        $('#divProgress').style.display = 'block';
+        $('#divBar').style.width        = '0%';
+        $('#pPhase').textContent        = 'Starting…';
+        $('#pFile').textContent         = '';
+        $('#pCount').textContent        = '';
+
+        apiPost('DuplicateFinder/Scan').then(function () {
+            setTimeout(startPolling, 800);
+        }).catch(function (err) {
+            $('#btnScan').disabled          = false;
+            $('#divProgress').style.display = 'none';
+            Dashboard.alert('Scan failed to start. Check server logs.\n' + JSON.stringify(err));
+        });
+    }
+
+    // ══════════ Last scan summary ══════════
+    function refreshLastScan() {
+        apiGet('DuplicateFinder/Results').then(function (data) {
+            if (data && data.lastRunAt) {
+                $('#pLastScan').textContent =
+                    'Last scan: ' + new Date(data.lastRunAt).toLocaleString() +
+                    ' — ' + data.totalGroups + ' duplicate groups found.';
+            }
+        }).catch(function () {});
+    }
+
+    // ══════════ Initial load ══════════
+    loadSettings();
+    refreshLastScan();
+    // If a scan is already running, attach to it.
+    apiGet('DuplicateFinder/Progress').then(function (data) {
+        if (data && data.isScanning) {
+            $('#btnScan').disabled          = true;
+            $('#divProgress').style.display = 'block';
+            startPolling();
+        }
+    }).catch(function () {});
+
+    function startPolling() {
+        if (pollTimer) clearInterval(pollTimer);
+        pollTimer = setInterval(poll, 1500);
+    }
+
+    function poll() {
+        apiGet('DuplicateFinder/Progress').then(function (data) {
+            if (!data || !data.isScanning) {
+                clearInterval(pollTimer);
+                pollTimer = null;
+                pageEl.querySelector('#divProgress').style.display = 'none';
+                pageEl.querySelector('#btnScan').disabled          = false;
+                pageEl.querySelector('#divDone').style.display     = 'block';
+                // Refresh last-scan summary
+                apiGet('DuplicateFinder/Results').then(function (r) {
+                    if (r && r.lastRunAt) {
+                        pageEl.querySelector('#pLastScan').textContent =
+                            'Last scan: ' + new Date(r.lastRunAt).toLocaleString() +
+                            ' — ' + r.totalGroups + ' duplicate groups found.';
+                    }
+                }).catch(function () {});
+                reportLoaded = false; // so switching to Report tab re-fetches
+                return;
+            }
+            var phase = data.phase === 'Fetching' ? 'Loading library…' : 'Comparing items…';
+            pageEl.querySelector('#pPhase').textContent  = phase + ' (' + data.percentComplete + '%)';
+            pageEl.querySelector('#divBar').style.width  = data.percentComplete + '%';
+            pageEl.querySelector('#pFile').textContent   = data.currentItem ? '📄 ' + data.currentItem : '';
+            pageEl.querySelector('#pCount').textContent  =
+                data.itemsTotal > 0 ? data.itemsProcessed + ' / ' + data.itemsTotal + ' items' : '';
+        }).catch(function () {});
+    }
+
+    // ══════════ Report ══════════
+    function loadReport() {
+        if (reportLoaded) return;
+        reportLoaded = true;
+
+        document.getElementById('dfLoad').style.display = 'block';
+        document.getElementById('dfErr').style.display  = 'none';
+        document.getElementById('dfMain').style.display = 'none';
+
+        apiGet('DuplicateFinder/Results').then(function (data) {
+            document.getElementById('dfLoad').style.display = 'none';
+
+            if (!data || !data.groups || !data.groups.length) {
+                showErr('No results yet — run a scan from the Settings tab first.');
+                return;
+            }
+
+            allGroups = data.groups;
+
+            var lastRun = data.lastRunAt
+                ? new Date(data.lastRunAt).toLocaleString()
+                : 'never';
+            document.getElementById('dfMeta').textContent =
+                data.totalGroups + ' duplicate groups · ' +
+                data.totalItems  + ' total items · last scan: ' + lastRun;
+
+            document.getElementById('dfMain').style.display = 'block';
+            applyFilter();
+
+        }).catch(function (err) {
+            document.getElementById('dfLoad').style.display = 'none';
+            showErr('Failed to load results. (' +
+                (err && err.status ? 'HTTP ' + err.status : String(err)) + ')');
+        });
+    }
+
+    function showErr(msg) {
+        var el = document.getElementById('dfErr');
+        el.textContent  = msg;
+        el.style.display = 'block';
+    }
+
+    function applyFilter() {
+        var text   = document.getElementById('dfFilter').value.toLowerCase().trim();
+        var reason = document.getElementById('dfReason').value;
+
+        filtered = allGroups.filter(function (g) {
+            if (reason !== '' && String(g.reason) !== reason) return false;
+            if (text) {
+                var hay = (g.groupLabel || '').toLowerCase();
+                for (var i = 0; i < (g.items || []).length; i++) {
+                    hay += ' ' + ((g.items[i].path) || '').toLowerCase();
+                }
+                if (hay.indexOf(text) === -1) return false;
+            }
+            return true;
+        });
+        page = 1;
+        render();
+    }
+
+    function ps() {
+        var v = parseInt(document.getElementById('dfPageSize').value, 10);
+        return v === 0 ? Math.max(filtered.length, 1) : v;
+    }
+
+    function render() {
+        var pageSize = ps();
+        var pages    = Math.max(1, Math.ceil(filtered.length / pageSize));
+        page         = Math.min(Math.max(page, 1), pages);
+
+        var start = (page - 1) * pageSize;
+        var slice = filtered.slice(start, start + pageSize);
+
+        var box = document.getElementById('dfGroups');
+        box.innerHTML = '';
+
+        if (slice.length === 0) {
+            box.innerHTML = '<div class="df-empty">No groups match the current filter.</div>';
+        } else {
+            for (var i = 0; i < slice.length; i++) {
+                box.appendChild(makeGroup(slice[i]));
+            }
+        }
+        renderPager(pages, pageSize);
+    }
+
+    function makeGroup(g) {
+        var wrap = document.createElement('div');
+        wrap.className = 'df-group';
+
+        var hdr = document.createElement('div');
+        hdr.className = 'df-hdr';
+        hdr.innerHTML =
+            '<span class="df-hdr-title">' + esc(g.groupLabel) + '</span>' +
+            '<span class="df-hdr-meta">' +
+                '<span>' + (g.items || []).length + ' copies</span>' +
+                '<span class="df-badge ' + badgeCls(g.reason) + '">' +
+                    reasonTxt(g.reason) + '</span>' +
+            '</span>';
+
+        var body = document.createElement('div');
+        body.className = 'df-body';
+
+        var tbl = document.createElement('table');
+        tbl.className = 'df-table';
+        tbl.innerHTML =
+            '<thead><tr>' +
+            '<th>File</th><th>Resolution</th><th>Codec</th>' +
+            '<th>Bitrate</th><th>Size</th><th>Provider IDs</th>' +
+            '</tr></thead>';
+
+        var tbody = document.createElement('tbody');
+        var items = g.items || [];
+        for (var i = 0; i < items.length; i++) {
+            tbody.appendChild(makeRow(items[i], i === 0));
+        }
+        tbl.appendChild(tbody);
+        body.appendChild(tbl);
+
+        hdr.addEventListener('click', function () { body.classList.toggle('collapsed'); });
+        wrap.appendChild(hdr);
+        wrap.appendChild(body);
+        return wrap;
+    }
+
+    function makeRow(item, isBest) {
+        var tr = document.createElement('tr');
+        if (isBest) tr.className = 'best';
+
+        var full  = (item.path || '').replace(/\\/g, '/');
+        var slash = full.lastIndexOf('/');
+        var name  = slash >= 0 ? full.substring(slash + 1) : full;
+        var dir   = slash >= 0 ? full.substring(0, slash)  : '';
+
+        var ids = [];
+        if (item.tmdbId)        ids.push('TMDb: ' + item.tmdbId);
+        if (item.imdbId)        ids.push('IMDB: ' + item.imdbId);
+        if (item.musicBrainzId) ids.push('MB: '   + item.musicBrainzId);
+
+        tr.innerHTML =
+            '<td>' +
+                (isBest ? '<span class="df-star">★</span>' : '') +
+                '<div class="df-name">' + esc(name || item.name || '—') + '</div>' +
+                '<div class="df-dir">'  + esc(dir) + '</div>' +
+            '</td>' +
+            '<td>' + (item.resolution || '—') + '</td>' +
+            '<td>' + (item.videoCodec
+                ? '<span class="df-pill">' + esc(item.videoCodec) + '</span>'
+                : '—') + '</td>' +
+            '<td style="white-space:nowrap;">' +
+                (item.bitRateKbps ? item.bitRateKbps.toLocaleString() + ' kbps' : '—') +
+            '</td>' +
+            '<td style="white-space:nowrap;">' + fmtBytes(item.fileSizeBytes) + '</td>' +
+            '<td class="df-ids">' + (ids.length ? ids.join('<br>') : '—') + '</td>';
+        return tr;
+    }
+
+    function renderPager(pages, pageSize) {
+        var pager = document.getElementById('dfPager');
+        pager.innerHTML = '';
+        if (pages <= 1) return;
+
+        var s = (page - 1) * pageSize + 1;
+        var e = Math.min(page * pageSize, filtered.length);
+        var info = document.createElement('span');
+        info.className   = 'pinfo';
+        info.textContent = s + '–' + e + ' of ' + filtered.length;
+        pager.appendChild(info);
+
+        function btn(label, target) {
+            var b = document.createElement('button');
+            b.textContent = label;
+            if (target < 1 || target > pages) b.disabled = true;
+            if (target === page) b.className = 'cur';
+            b.addEventListener('click', function () {
+                page = target;
+                render();
+                window.scrollTo(0, 0);
+            });
+            return b;
+        }
+        pager.appendChild(btn('‹', page - 1));
+        var lo = Math.max(1, page - 2), hi = Math.min(pages, page + 2);
+        for (var p = lo; p <= hi; p++) pager.appendChild(btn(String(p), p));
+        pager.appendChild(btn('›', page + 1));
+    }
+
+    function esc(s) {
+        return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+    function fmtBytes(b) {
+        if (!b || b < 0) return '—';
+        if (b >= 1073741824) return (b / 1073741824).toFixed(1) + ' GB';
+        if (b >= 1048576)    return Math.round(b / 1048576) + ' MB';
+        return b + ' B';
+    }
+}());
+</script>
+</div>
+</body>
+</html>
