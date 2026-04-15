@@ -1,0 +1,21 @@
+[
+    {
+        "guid": "2d0aac3c-29b6-48e7-a445-a34c79291899",
+        "name": "DuplicateFinder",
+        "description": "Detects duplicate movies, TV episodes, and music tracks.",
+        "overview": "Scans your Jellyfin library for duplicate movies, TV episodes, and music tracks using provider IDs (TMDb, IMDB, MusicBrainz) and fuzzy title+year matching. Presents a report highlighting the best copy to keep based on resolution, codec, and bitrate.",
+        "owner": "Aryza",
+        "category": "General",
+        "imageUrl": "",
+        "versions": [
+            {
+                "version": "1.0.2.0",
+                "changelog": "Initial release.",
+                "targetAbi": "10.11.0.0",
+                "sourceUrl": "https://github.com/Aryza/jellyfin-duplicatefinder/releases/download/v1.0.2/duplicatefinder_1.0.2.0.zip",
+                "checksum": "dec9e38fb3b725e2e69470d31346b2dc",
+                "timestamp": "2026-04-14T00:00:00Z"
+            }
+        ]
+    }
+]
