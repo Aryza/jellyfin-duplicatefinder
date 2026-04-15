@@ -57,6 +57,7 @@
                 .b-prov { background: rgba(0,164,220,0.2); color: #7dd3fc; }
                 .b-titl { background: rgba(168,85,247,0.2); color: #d8b4fe; }
                 .b-both { background: rgba(16,185,129,0.2); color: #6ee7b7; }
+                .b-alt  { background: rgba(234,179,8,0.2);  color: #fde68a; }
                 .df-body { overflow-x: auto; }
                 .df-body.collapsed { display: none; }
                 .df-table { width: 100%; border-collapse: collapse; font-size: 0.85em; min-width: 580px; }
@@ -196,6 +197,7 @@
                             <option value="ProviderId">Provider ID</option>
                             <option value="TitleAndYear">Title + year</option>
                             <option value="Both">Both</option>
+                            <option value="AlternateVersions">Alternate versions</option>
                         </select>
                         <select id="dfPageSize">
                             <option value="25">25 per page</option>
@@ -223,8 +225,8 @@
 
     // Constants used by the report renderer — declared at the top so they're
     // always defined before any render function can run.
-    var BADGE_CLS  = { ProviderId: 'b-prov', TitleAndYear: 'b-titl', Both: 'b-both' };
-    var REASON_TXT = { ProviderId: 'Provider ID', TitleAndYear: 'Title + year', Both: 'ID + title' };
+    var BADGE_CLS  = { ProviderId: 'b-prov', TitleAndYear: 'b-titl', Both: 'b-both', AlternateVersions: 'b-alt' };
+    var REASON_TXT = { ProviderId: 'Provider ID', TitleAndYear: 'Title + year', Both: 'ID + title', AlternateVersions: 'Alternate versions' };
     function badgeCls(r)  { return BADGE_CLS[r]  || 'b-prov'; }
     function reasonTxt(r) { return REASON_TXT[r] || '?'; }
 

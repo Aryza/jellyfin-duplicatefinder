@@ -105,5 +105,12 @@ public enum MatchReason
     TitleAndYear,
 
     /// <summary>Both provider ID and title+year match (strongest signal).</summary>
-    Both
+    Both,
+
+    /// <summary>
+    /// A single Jellyfin item has multiple media sources attached — typically
+    /// two files with the same basename in the same directory (e.g. S01E01.mkv
+    /// and S01E01.mp4) that Jellyfin merged into one logical item.
+    /// </summary>
+    AlternateVersions
 }

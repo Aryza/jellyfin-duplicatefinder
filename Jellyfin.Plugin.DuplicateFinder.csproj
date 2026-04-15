@@ -22,4 +22,10 @@
     <EmbeddedResource Include="Configuration\configPage.html" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Expose internal helpers (NormaliseTitle, JaroWinkler, PartNumber,
+         MatchesTitleAndYear, UnionFind, …) to the xUnit test project. -->
+    <InternalsVisibleTo Include="Jellyfin.Plugin.DuplicateFinder.Tests" />
+  </ItemGroup>
+
 </Project>

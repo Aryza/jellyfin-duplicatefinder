@@ -8,6 +8,7 @@ using Jellyfin.Plugin.DuplicateFinder.Configuration;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
+using MediaBrowser.Model.Dto;
 using MediaBrowser.Model.Entities;
 using Microsoft.Extensions.Logging;
 
@@ -85,6 +86,11 @@ public class DuplicateDetector
                 onProgress, processed, total);
         }
 
+        // ── 2c. Alternate versions (multiple sources on a single BaseItem) ──
+        // Zero-cost, zero-false-positive pass: Jellyfin has already told us
+        // these files represent the same episode/movie.
+        var altGroups = FindAlternateVersionGroups(items, config, cancellationToken);
+
         onProgress?.Invoke(new ScanProgress
         {
             Phase = ScanPhase.Done, CurrentItem = string.Empty,
@@ -92,7 +98,7 @@ public class DuplicateDetector
         });
 
         // Phase 3 – collect groups
-        var results = items
+        var unionGroups = items
             .GroupBy(i => uf.Find(i.Id))
             .Where(g => g.Count() > 1)
             .Select(cluster =>
@@ -115,11 +121,16 @@ public class DuplicateDetector
                     Reason     = reason,
                     Items      = clusterItems
                 };
-            })
+            });
+
+        var results = unionGroups
+            .Concat(altGroups)
             .OrderBy(g => g.GroupLabel)
             .ToList();
 
-        _logger.LogInformation("DuplicateFinder: found {Count} duplicate groups", results.Count);
+        _logger.LogInformation(
+            "DuplicateFinder: found {Count} duplicate groups ({Alt} alternate-version)",
+            results.Count, altGroups.Count);
         return results;
     }
 
@@ -162,11 +173,21 @@ public class DuplicateDetector
 
             if (item is Episode ep && ep.IndexNumber.HasValue && ep.ParentIndexNumber.HasValue)
             {
-                var seriesId = ep.GetProviderId(MetadataProvider.Tmdb)
-                            ?? ep.Series?.GetProviderId(MetadataProvider.Tmdb);
-                if (!string.IsNullOrEmpty(seriesId))
+                var seriesKey = ResolveSeriesKey(ep);
+                if (!string.IsNullOrEmpty(seriesKey))
                 {
-                    var key = $"{seriesId}:S{ep.ParentIndexNumber}E{ep.IndexNumber}";
+                    // IndexNumberEnd distinguishes multi-episode files like
+                    // "S01E01-E02.mkv" (IndexNumber=1, IndexNumberEnd=2) from a
+                    // standalone "S01E01.mkv" (IndexNumberEnd=null). Without this
+                    // a multi-episode file would bucket together with every single
+                    // file that starts at the same episode number.
+                    //
+                    // PartNumber separates "S01E01 Part 1.mkv" / "Part 2.mkv"
+                    // into different buckets so Jellyfin not merging a multi-part
+                    // episode file never results in a false duplicate.
+                    var end  = ep.IndexNumberEnd ?? ep.IndexNumber;
+                    var part = PartNumber(ep.Path);
+                    var key  = $"{seriesKey}:S{ep.ParentIndexNumber}E{ep.IndexNumber}-E{end}:P{part}";
                     Bucket(episodeBuckets, key, item.Id);
                 }
             }
@@ -265,6 +286,111 @@ public class DuplicateDetector
         return processed;
     }
 
+    // ── Alternate-versions detection ──────────────────────────────────────────
+
+    /// <summary>
+    /// Scans each item for multiple attached media sources (alternate versions
+    /// auto-merged by Jellyfin). These are true duplicates — typically two files
+    /// with the same basename in the same directory, e.g. <c>S01E01.mkv</c> and
+    /// <c>S01E01.mp4</c> — that the provider-ID and title-matching passes cannot
+    /// surface because Jellyfin has already collapsed them into a single
+    /// <see cref="BaseItem"/>.
+    /// </summary>
+    private List<DuplicateGroup> FindAlternateVersionGroups(
+        List<BaseItem> items,
+        PluginConfiguration config,
+        CancellationToken ct)
+    {
+        var groups = new List<DuplicateGroup>();
+
+        foreach (var item in items)
+        {
+            ct.ThrowIfCancellationRequested();
+
+            IReadOnlyList<MediaSourceInfo>? sources;
+            try
+            {
+                sources = item.GetMediaSources(enablePathSubstitution: false);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "DuplicateFinder: GetMediaSources failed for {Item}", item.Name);
+                continue;
+            }
+
+            if (sources is null) continue;
+
+            // Filter to sources that actually point to distinct files on disk.
+            // Jellyfin occasionally returns a single logical source twice (once
+            // for the canonical path and once for a substitution), and we don't
+            // want to flag those as duplicates.
+            var fileSources = sources
+                .Where(s => !string.IsNullOrEmpty(s.Path))
+                .GroupBy(s => s.Path!, StringComparer.OrdinalIgnoreCase)
+                .Select(g => g.First())
+                .ToList();
+
+            if (fileSources.Count < 2) continue;
+
+            var clusterItems = fileSources
+                .Select(src => BuildDuplicateItemFromSource(item, src, config))
+                .OrderByDescending(d => d.QualityScore)
+                .ToList();
+
+            groups.Add(new DuplicateGroup
+            {
+                GroupLabel = BuildGroupLabel(item),
+                Reason     = MatchReason.AlternateVersions,
+                Items      = clusterItems
+            });
+
+            _logger.LogDebug(
+                "DuplicateFinder: alternate versions for {Item} ({Count} sources)",
+                item.Name, fileSources.Count);
+        }
+
+        return groups;
+    }
+
+    private static DuplicateItem BuildDuplicateItemFromSource(
+        BaseItem item, MediaSourceInfo src, PluginConfiguration config)
+    {
+        string? resolution = null;
+        string? videoCodec = null;
+        int bitRateKbps = 0;
+
+        if (config.IncludeMediaInfo && src.MediaStreams is not null)
+        {
+            var videoStream = src.MediaStreams
+                                 .FirstOrDefault(s => s.Type == MediaStreamType.Video);
+            if (videoStream is not null)
+            {
+                if (videoStream.Width.HasValue && videoStream.Height.HasValue)
+                    resolution = $"{videoStream.Width}x{videoStream.Height}";
+                videoCodec = videoStream.Codec;
+            }
+            bitRateKbps = src.Bitrate.HasValue ? src.Bitrate.Value / 1000 : 0;
+        }
+
+        return new DuplicateItem
+        {
+            // All alternate-version rows point back to the same Jellyfin item —
+            // clicking any row in the report should open that one item's page.
+            Id            = item.Id,
+            Name          = item.Name ?? string.Empty,
+            Path          = src.Path ?? string.Empty,
+            FileSizeBytes = src.Size ?? -1,
+            Resolution    = resolution,
+            VideoCodec    = videoCodec,
+            BitRateKbps   = bitRateKbps,
+            Container     = src.Container,
+            TmdbId        = item.GetProviderId(MetadataProvider.Tmdb),
+            ImdbId        = item.GetProviderId(MetadataProvider.Imdb),
+            MusicBrainzId = item.GetProviderId(MetadataProvider.MusicBrainzTrack),
+            QualityScore  = ComputeQualityScore(resolution, bitRateKbps, src.Container, src.Size)
+        };
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private static void Bucket<TKey>(Dictionary<TKey, List<Guid>> dict, TKey key, Guid id)
@@ -299,24 +425,78 @@ public class DuplicateDetector
     }
 
     /// <summary>
-    /// Coarse bucket key: normalised first word + production year.
-    /// "Avatar: Special Edition (2009)" → "avatar|2009"
-    /// "The Matrix Reloaded (2003)"     → "matrix|2003"
-    /// Groups items that could plausibly be duplicates into the same bucket
-    /// without any false-negative risk (different first words → never duplicates
-    /// after subtitle stripping, which is true for the vast majority of titles).
+    /// Coarse bucket key: narrow pre-grouping so we only fuzzy-compare items
+    /// that could plausibly be duplicates.
+    ///
+    /// For movies/music: normalised first word + production year + optional
+    /// part number — "Avatar: Special Edition (2009)" → "avatar|2009|P0".
+    ///
+    /// For episodes: **series identity** + S/E + episode range + part number.
+    /// Episode titles are deliberately NOT used because two unrelated shows
+    /// can both have an S01E01 called "Pilot" and would otherwise collide.
     /// </summary>
-    private static string CoarseBucketKey(BaseItem item)
+    internal static string CoarseBucketKey(BaseItem item)
     {
+        var year = item.ProductionYear?.ToString() ?? "?";
+        var part = PartNumber(item.Path);
+
+        if (item is Episode ep)
+        {
+            var seriesKey = ResolveSeriesKey(ep) ?? "unknown";
+            var end       = ep.IndexNumberEnd ?? ep.IndexNumber;
+            return $"ep|{seriesKey}|S{ep.ParentIndexNumber}E{ep.IndexNumber}-E{end}|P{part}";
+        }
+
         var title = NormaliseTitle(item.Name ?? string.Empty);
         var word  = title.Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? title;
-        var year  = item.ProductionYear?.ToString() ?? "?";
+        return $"{word}|{year}|P{part}";
+    }
 
-        // For episodes, add season+episode to keep buckets tight
-        if (item is Episode ep)
-            return $"{word}|{year}|S{ep.ParentIndexNumber}E{ep.IndexNumber}";
+    /// <summary>
+    /// Build a stable series identity string for bucketing episodes. Prefers
+    /// external provider IDs (TMDb/TVDB/IMDB) so that different Jellyfin
+    /// libraries still converge on the same series, then falls back to
+    /// Jellyfin's internal series GUID.
+    /// </summary>
+    internal static string? ResolveSeriesKey(Episode ep)
+    {
+        // Prefer external provider IDs so that different Jellyfin libraries
+        // still converge on the same series. The Series navigation goes through
+        // BaseItem.LibraryManager, which may be null in unit-test contexts or
+        // throw transiently if the series row has been deleted mid-scan — fall
+        // back to the internal SeriesId in either case.
+        try
+        {
+            var s = ep.Series;
+            if (s is not null)
+            {
+                var id = s.GetProviderId(MetadataProvider.Tmdb)
+                      ?? s.GetProviderId(MetadataProvider.Tvdb)
+                      ?? s.GetProviderId(MetadataProvider.Imdb);
+                if (!string.IsNullOrEmpty(id)) return "ext:" + id;
+            }
+        }
+        catch (Exception)
+        {
+            // Fall through to the SeriesId fallback.
+        }
 
-        return $"{word}|{year}";
+        return ep.SeriesId == Guid.Empty ? null : "jf:" + ep.SeriesId;
+    }
+
+    // Matches common multi-part file markers: "Part 1", "pt2", "CD1", "disc 3".
+    // Used to prevent split files for a single episode/movie from being
+    // flagged as duplicates of each other when Jellyfin hasn't merged them.
+    private static readonly Regex _partRe = new(
+        @"\b(?:part|pt|cd|disc|disk)[\s._\-]*(\d+)\b",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    internal static int PartNumber(string? path)
+    {
+        if (string.IsNullOrEmpty(path)) return 0;
+        var name = System.IO.Path.GetFileNameWithoutExtension(path);
+        var m    = _partRe.Match(name);
+        return m.Success && int.TryParse(m.Groups[1].Value, out var n) ? n : 0;
     }
 
     // ── Item fetching ─────────────────────────────────────────────────────────
@@ -367,11 +547,32 @@ public class DuplicateDetector
 
     // ── Title matching ────────────────────────────────────────────────────────
 
-    private bool MatchesTitleAndYear(BaseItem a, BaseItem b, double threshold)
+    internal bool MatchesTitleAndYear(BaseItem a, BaseItem b, double threshold)
     {
         if (a.ProductionYear.HasValue && b.ProductionYear.HasValue
             && a.ProductionYear != b.ProductionYear)
             return false;
+
+        // Part-split files ("Movie Part 1.mkv" / "Movie Part 2.mkv",
+        // "S01E01 Part 1.mkv" / "Part 2.mkv") are NOT duplicates of each other
+        // even when everything else matches. Applied to all item types.
+        if (PartNumber(a.Path) != PartNumber(b.Path)) return false;
+
+        if (a is Episode epA && b is Episode epB)
+        {
+            // Different series → never duplicates, regardless of title similarity.
+            // Two unrelated shows can both have an S01E01 titled "Pilot".
+            if (epA.SeriesId != epB.SeriesId) return false;
+            if (epA.ParentIndexNumber != epB.ParentIndexNumber) return false;
+            if (epA.IndexNumber       != epB.IndexNumber)       return false;
+
+            // Multi-episode range files ("S01E01-E02.mkv") must share the same
+            // end episode to be considered duplicates — otherwise an E01-E02
+            // file would match both E01 alone and E01-E03.
+            var endA = epA.IndexNumberEnd ?? epA.IndexNumber;
+            var endB = epB.IndexNumberEnd ?? epB.IndexNumber;
+            if (endA != endB) return false;
+        }
 
         var titleA = NormaliseTitle(a.Name ?? string.Empty);
         var titleB = NormaliseTitle(b.Name ?? string.Empty);
@@ -380,12 +581,6 @@ public class DuplicateDetector
             return false;
 
         if (titleA == titleB) return true;
-
-        if (a is Episode epA && b is Episode epB)
-        {
-            if (epA.IndexNumber != epB.IndexNumber || epA.ParentIndexNumber != epB.ParentIndexNumber)
-                return false;
-        }
 
         double score = JaroWinkler(titleA, titleB);
         if (score >= threshold)
@@ -398,7 +593,7 @@ public class DuplicateDetector
     private static readonly Regex _nonAlphaRe   = new(@"[^a-z0-9\s]",   RegexOptions.Compiled);
     private static readonly Regex _whitespaceRe  = new(@"\s+",            RegexOptions.Compiled);
 
-    private static string NormaliseTitle(string title)
+    internal static string NormaliseTitle(string title)
     {
         if (string.IsNullOrWhiteSpace(title)) return string.Empty;
         title = Regex.Replace(title.Trim(), @"^(the|a|an)\s+", string.Empty, RegexOptions.IgnoreCase);
@@ -411,7 +606,7 @@ public class DuplicateDetector
 
     // ── Jaro-Winkler ─────────────────────────────────────────────────────────
 
-    private static double JaroWinkler(string s1, string s2)
+    internal static double JaroWinkler(string s1, string s2)
     {
         if (s1 == s2) return 1.0;
 
@@ -499,7 +694,7 @@ public class DuplicateDetector
         };
     }
 
-    private static long ComputeQualityScore(
+    internal static long ComputeQualityScore(
         string? resolution, int bitRateKbps, string? container, long? fileSizeBytes)
     {
         long pixels = 0;
