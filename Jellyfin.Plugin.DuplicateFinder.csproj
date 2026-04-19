@@ -8,7 +8,7 @@
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <Version>1.0.2</Version>
+    <Version>1.1.0</Version>
   </PropertyGroup>
 
   <ItemGroup>
@@ -20,6 +20,11 @@
   <ItemGroup>
     <!-- Embed the unified config/report page HTML as a resource served by Jellyfin -->
     <EmbeddedResource Include="Configuration\configPage.html" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Prevent the SDK from compiling test sources that live under tests/ -->
+    <Compile Remove="tests/**" />
   </ItemGroup>
 
   <ItemGroup>

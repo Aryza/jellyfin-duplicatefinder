@@ -10,7 +10,13 @@ dotnet build -c Release
 
 Output: `bin/Release/net9.0/Jellyfin.Plugin.DuplicateFinder.dll`
 
-There are no automated tests in this project. Verification requires deploying the `.dll` to a running Jellyfin instance.
+## Test
+
+```bash
+dotnet test tests/Jellyfin.Plugin.DuplicateFinder.Tests/
+```
+
+90 xUnit tests covering NormaliseTitle, JaroWinkler, PartNumber, QualityScore, UnionFind, CoarseBucketKey, and MatchesTitleAndYear. Full end-to-end verification still requires deploying the `.dll` to a running Jellyfin instance.
 
 ## Architecture
 
@@ -19,10 +25,11 @@ This is a Jellyfin 10.11.x plugin targeting `net9.0`. The plugin is loaded by Je
 **Data flow for a scan:**
 
 1. `ScanLibraryTask` (or `DuplicateFinderController.TriggerScan`) calls `DuplicateDetector.FindDuplicates()`
-2. `DuplicateDetector` fetches items via `ILibraryManager`, then runs two passes:
+2. `DuplicateDetector` fetches items via `ILibraryManager`, then runs three passes:
    - Provider ID buckets (TMDb, IMDB, MusicBrainz, series S×E key) — zero false positives
    - Fuzzy title+year buckets (Jaro-Winkler ≥ threshold, coarse first-word+year pre-grouping)
-3. Both passes feed into a `UnionFind<Guid>` for transitive grouping (A≡B + B≡C → one group)
+   - Alternate-version detection — items with multiple `MediaSource` entries (e.g. S01E01.mkv + S01E01.mp4 merged by Jellyfin)
+3. The first two passes feed into a `UnionFind<Guid>` for transitive grouping (A≡B + B≡C → one group); alternate-version groups are appended directly
 4. Results are stored in static fields on `ScanLibraryTask` and persisted to `duplicatefinder_results.json` in Jellyfin's data directory
 5. `DuplicateFinderController` exposes the results and live scan progress via REST endpoints
 

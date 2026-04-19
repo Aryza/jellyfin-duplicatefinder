@@ -1,0 +1,206 @@
+<?xml version="1.0"?>
+<doc>
+    <assembly>
+        <name>Jellyfin.Plugin.DuplicateFinder</name>
+    </assembly>
+    <members>
+        <member name="M:Jellyfin.Plugin.DuplicateFinder.Api.DuplicateFinderController.GetResults">
+            <summary>Returns the duplicate groups from the most recent completed scan.</summary>
+        </member>
+        <member name="M:Jellyfin.Plugin.DuplicateFinder.Api.DuplicateFinderController.GetProgress">
+            <summary>
+            Returns the live progress of a running scan, or null if no scan is in progress.
+            The config page polls this every second while scanning.
+            </summary>
+        </member>
+        <member name="M:Jellyfin.Plugin.DuplicateFinder.Api.DuplicateFinderController.TriggerScan">
+            <summary>Triggers an immediate scan on a background thread.</summary>
+        </member>
+        <member name="T:Jellyfin.Plugin.DuplicateFinder.Configuration.PluginConfiguration">
+            <summary>
+            User-configurable settings, persisted as XML by Jellyfin's plugin framework.
+            </summary>
+        </member>
+        <member name="P:Jellyfin.Plugin.DuplicateFinder.Configuration.PluginConfiguration.ScanMovies">
+            <summary>Include movies in duplicate scanning.</summary>
+        </member>
+        <member name="P:Jellyfin.Plugin.DuplicateFinder.Configuration.PluginConfiguration.ScanEpisodes">
+            <summary>Include TV episodes in duplicate scanning.</summary>
+        </member>
+        <member name="P:Jellyfin.Plugin.DuplicateFinder.Configuration.PluginConfiguration.ScanMusic">
+            <summary>Include music tracks in duplicate scanning.</summary>
+        </member>
+        <member name="P:Jellyfin.Plugin.DuplicateFinder.Configuration.PluginConfiguration.FuzzyMatchThreshold">
+            <summary>
+            Minimum Jaro-Winkler similarity (0.0–1.0) for two titles to be considered
+            a fuzzy match. 0.90 catches "Avatar" / "Avatar: The Way of Water" while
+            rejecting clearly different titles.
+            </summary>
+        </member>
+        <member name="P:Jellyfin.Plugin.DuplicateFinder.Configuration.PluginConfiguration.MatchOnProviderIds">
+            <summary>
+            When true, two items with matching provider IDs (TMDb, IMDB, MusicBrainz)
+            are always flagged as duplicates regardless of fuzzy score.
+            </summary>
+        </member>
+        <member name="P:Jellyfin.Plugin.DuplicateFinder.Configuration.PluginConfiguration.MatchOnTitleAndYear">
+            <summary>
+            When true, title + year fuzzy matching is used as a fallback (or primary
+            signal when provider IDs are absent).
+            </summary>
+        </member>
+        <member name="P:Jellyfin.Plugin.DuplicateFinder.Configuration.PluginConfiguration.IncludeMediaInfo">
+            <summary>
+            When true, media stream properties (resolution, codec) are included in
+            the duplicate report to help you decide which copy to keep.
+            </summary>
+        </member>
+        <member name="T:Jellyfin.Plugin.DuplicateFinder.Detection.ScanProgress">
+            <summary>Progress snapshot reported during a scan.</summary>
+        </member>
+        <member name="T:Jellyfin.Plugin.DuplicateFinder.Detection.DuplicateDetector">
+             <summary>
+             Main detection engine. Stateless — call <see cref="M:Jellyfin.Plugin.DuplicateFinder.Detection.DuplicateDetector.FindDuplicates(Jellyfin.Plugin.DuplicateFinder.Configuration.PluginConfiguration,System.Threading.CancellationToken,System.Action{Jellyfin.Plugin.DuplicateFinder.Detection.ScanProgress})"/> to run a scan.
+            
+             Performance strategy: instead of O(n²) brute-force pair comparison, items are
+             pre-grouped into "candidate buckets" by cheap keys (provider ID, normalised title+year).
+             Only items within the same bucket are compared against each other, reducing the
+             effective comparison count from ~15M (5500 items) to a few thousand.
+             </summary>
+        </member>
+        <member name="M:Jellyfin.Plugin.DuplicateFinder.Detection.DuplicateDetector.MergeByProviderBuckets(System.Collections.Generic.List{MediaBrowser.Controller.Entities.BaseItem},Jellyfin.Plugin.DuplicateFinder.Detection.UnionFind{System.Guid},System.Collections.Generic.Dictionary{System.ValueTuple{System.Guid,System.Guid},Jellyfin.Plugin.DuplicateFinder.Detection.MatchReason},System.Threading.CancellationToken,System.Action{Jellyfin.Plugin.DuplicateFinder.Detection.ScanProgress},System.Int32,System.Int32)">
+            <summary>
+            Groups items by each provider ID they carry, then union-finds within each group.
+            A single pass over all items builds the buckets; no O(n²) loop needed.
+            </summary>
+        </member>
+        <member name="M:Jellyfin.Plugin.DuplicateFinder.Detection.DuplicateDetector.MergeByTitleBuckets(System.Collections.Generic.List{MediaBrowser.Controller.Entities.BaseItem},Jellyfin.Plugin.DuplicateFinder.Configuration.PluginConfiguration,Jellyfin.Plugin.DuplicateFinder.Detection.UnionFind{System.Guid},System.Collections.Generic.Dictionary{System.ValueTuple{System.Guid,System.Guid},Jellyfin.Plugin.DuplicateFinder.Detection.MatchReason},System.Threading.CancellationToken,System.Action{Jellyfin.Plugin.DuplicateFinder.Detection.ScanProgress},System.Int32,System.Int32)">
+            <summary>
+            Groups items into coarse title+year buckets, then does O(k²) fuzzy comparison
+            only within each bucket. Bucket key = normalised first word + production year.
+            </summary>
+        </member>
+        <member name="M:Jellyfin.Plugin.DuplicateFinder.Detection.DuplicateDetector.FindAlternateVersionGroups(System.Collections.Generic.List{MediaBrowser.Controller.Entities.BaseItem},Jellyfin.Plugin.DuplicateFinder.Configuration.PluginConfiguration,System.Threading.CancellationToken)">
+            <summary>
+            Scans each item for multiple attached media sources (alternate versions
+            auto-merged by Jellyfin). These are true duplicates — typically two files
+            with the same basename in the same directory, e.g. <c>S01E01.mkv</c> and
+            <c>S01E01.mp4</c> — that the provider-ID and title-matching passes cannot
+            surface because Jellyfin has already collapsed them into a single
+            <see cref="T:MediaBrowser.Controller.Entities.BaseItem"/>.
+            </summary>
+        </member>
+        <member name="M:Jellyfin.Plugin.DuplicateFinder.Detection.DuplicateDetector.CoarseBucketKey(MediaBrowser.Controller.Entities.BaseItem)">
+             <summary>
+             Coarse bucket key: narrow pre-grouping so we only fuzzy-compare items
+             that could plausibly be duplicates.
+            
+             For movies/music: normalised first word + production year + optional
+             part number — "Avatar: Special Edition (2009)" → "avatar|2009|P0".
+            
+             For episodes: **series identity** + S/E + episode range + part number.
+             Episode titles are deliberately NOT used because two unrelated shows
+             can both have an S01E01 called "Pilot" and would otherwise collide.
+             </summary>
+        </member>
+        <member name="M:Jellyfin.Plugin.DuplicateFinder.Detection.DuplicateDetector.ResolveSeriesKey(MediaBrowser.Controller.Entities.TV.Episode)">
+            <summary>
+            Build a stable series identity string for bucketing episodes. Prefers
+            external provider IDs (TMDb/TVDB/IMDB) so that different Jellyfin
+            libraries still converge on the same series, then falls back to
+            Jellyfin's internal series GUID.
+            </summary>
+        </member>
+        <member name="M:Jellyfin.Plugin.DuplicateFinder.Detection.DuplicateDetector.FetchItems(Jellyfin.Plugin.DuplicateFinder.Configuration.PluginConfiguration,System.Threading.CancellationToken)">
+            <summary>
+            Fetches one item type per query to avoid the EF MultipleCollectionInclude
+            warning that appears when Jellyfin joins multiple navigations in one query.
+            </summary>
+        </member>
+        <member name="T:Jellyfin.Plugin.DuplicateFinder.Detection.DuplicateItem">
+            <summary>
+            Describes a single media file that is part of a duplicate group,
+            enriched with media info for the user to make a keep/delete decision.
+            </summary>
+        </member>
+        <member name="P:Jellyfin.Plugin.DuplicateFinder.Detection.DuplicateItem.Id">
+            <summary>Jellyfin internal item ID.</summary>
+        </member>
+        <member name="P:Jellyfin.Plugin.DuplicateFinder.Detection.DuplicateItem.Name">
+            <summary>Display name as shown in the Jellyfin UI.</summary>
+        </member>
+        <member name="P:Jellyfin.Plugin.DuplicateFinder.Detection.DuplicateItem.Path">
+            <summary>Full path to the media file on disk.</summary>
+        </member>
+        <member name="P:Jellyfin.Plugin.DuplicateFinder.Detection.DuplicateItem.FileSizeBytes">
+            <summary>File size in bytes. -1 if unavailable.</summary>
+        </member>
+        <member name="P:Jellyfin.Plugin.DuplicateFinder.Detection.DuplicateItem.Resolution">
+            <summary>e.g. "1920x1080", "3840x2160". Null if not available.</summary>
+        </member>
+        <member name="P:Jellyfin.Plugin.DuplicateFinder.Detection.DuplicateItem.VideoCodec">
+            <summary>Video codec, e.g. "hevc", "h264", "av1".</summary>
+        </member>
+        <member name="P:Jellyfin.Plugin.DuplicateFinder.Detection.DuplicateItem.BitRateKbps">
+            <summary>Overall container bitrate in kbps. 0 if unknown.</summary>
+        </member>
+        <member name="P:Jellyfin.Plugin.DuplicateFinder.Detection.DuplicateItem.Container">
+            <summary>Container format, e.g. "mkv", "mp4".</summary>
+        </member>
+        <member name="P:Jellyfin.Plugin.DuplicateFinder.Detection.DuplicateItem.TmdbId">
+            <summary>TMDb ID if present on this item.</summary>
+        </member>
+        <member name="P:Jellyfin.Plugin.DuplicateFinder.Detection.DuplicateItem.ImdbId">
+            <summary>IMDB ID if present on this item.</summary>
+        </member>
+        <member name="P:Jellyfin.Plugin.DuplicateFinder.Detection.DuplicateItem.MusicBrainzId">
+            <summary>MusicBrainz track ID if present on this item.</summary>
+        </member>
+        <member name="P:Jellyfin.Plugin.DuplicateFinder.Detection.DuplicateItem.QualityScore">
+            <summary>
+            Computed quality score (higher = better). Used to rank versions within
+            a group so the UI can suggest which copy to keep.
+            Scoring: resolution pixels (weighted) + bitrate + container bonus.
+            </summary>
+        </member>
+        <member name="T:Jellyfin.Plugin.DuplicateFinder.Detection.DuplicateGroup">
+            <summary>
+            A group of two or more items that the detector considers duplicates.
+            </summary>
+        </member>
+        <member name="P:Jellyfin.Plugin.DuplicateFinder.Detection.DuplicateGroup.Reason">
+            <summary>How the group was identified.</summary>
+        </member>
+        <member name="P:Jellyfin.Plugin.DuplicateFinder.Detection.DuplicateGroup.GroupLabel">
+            <summary>
+            Human-readable label for the group, e.g. "Avatar (2009)" or
+            "S01E03 - The One With…".
+            </summary>
+        </member>
+        <member name="P:Jellyfin.Plugin.DuplicateFinder.Detection.DuplicateGroup.Items">
+            <summary>All items in this duplicate group, sorted best-first by QualityScore.</summary>
+        </member>
+        <member name="P:Jellyfin.Plugin.DuplicateFinder.Detection.DuplicateGroup.BestCandidate">
+            <summary>Convenience: the item with the highest QualityScore (suggested keep).</summary>
+        </member>
+        <member name="T:Jellyfin.Plugin.DuplicateFinder.Detection.MatchReason">
+            <summary>Reason a duplicate group was formed.</summary>
+        </member>
+        <member name="F:Jellyfin.Plugin.DuplicateFinder.Detection.MatchReason.ProviderId">
+            <summary>Two items share a TMDb / IMDB / MusicBrainz provider ID.</summary>
+        </member>
+        <member name="F:Jellyfin.Plugin.DuplicateFinder.Detection.MatchReason.TitleAndYear">
+            <summary>Two items match on normalised title + production year via fuzzy comparison.</summary>
+        </member>
+        <member name="F:Jellyfin.Plugin.DuplicateFinder.Detection.MatchReason.Both">
+            <summary>Both provider ID and title+year match (strongest signal).</summary>
+        </member>
+        <member name="F:Jellyfin.Plugin.DuplicateFinder.Detection.MatchReason.AlternateVersions">
+            <summary>
+            A single Jellyfin item has multiple media sources attached — typically
+            two files with the same basename in the same directory (e.g. S01E01.mkv
+            and S01E01.mp4) that Jellyfin merged into one logical item.
+            </summary>
+        </member>
+    </members>
+</doc>
