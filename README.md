@@ -1,6 +1,6 @@
 # Jellyfin.Plugin.DuplicateFinder
 
-Detects duplicate movies, TV episodes, and music tracks in your Jellyfin 10.11.x library.
+Detects duplicate movies, TV episodes, and music tracks in your Jellyfin 12.0.x library.
 
 ## Features
 
@@ -32,7 +32,7 @@ Detects duplicate movies, TV episodes, and music tracks in your Jellyfin 10.11.x
    ```bash
    dotnet build -c Release
    ```
-   Output: `bin/Release/net9.0/Jellyfin.Plugin.DuplicateFinder.dll`
+   Output: `bin/Release/net10.0/Jellyfin.Plugin.DuplicateFinder.dll`
 2. Copy it into your Jellyfin plugins directory:
    - Linux default: `~/.local/share/jellyfin/plugins/DuplicateFinder/`
    - Docker: map a volume and drop it in there
@@ -55,7 +55,7 @@ This repo doubles as a Jellyfin plugin repository. The files are:
 3. Stage the release artifact:
    ```bash
    mkdir -p build/release
-   cp bin/Release/net9.0/Jellyfin.Plugin.DuplicateFinder.dll build/release/
+   cp bin/Release/net10.0/Jellyfin.Plugin.DuplicateFinder.dll build/release/
    # Update build/release/meta.json: version + timestamp
    (cd build/release && zip -j duplicatefinder_<version>.zip \
         Jellyfin.Plugin.DuplicateFinder.dll meta.json)
@@ -77,7 +77,7 @@ Jellyfin installations already subscribed to this repo will pick up the update o
 dotnet build -c Release
 ```
 
-Output: `bin/Release/net9.0/Jellyfin.Plugin.DuplicateFinder.dll`
+Output: `bin/Release/net10.0/Jellyfin.Plugin.DuplicateFinder.dll`
 
 ## Architecture
 

@@ -1,20 +1,20 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <AssemblyName>Jellyfin.Plugin.DuplicateFinder</AssemblyName>
     <RootNamespace>Jellyfin.Plugin.DuplicateFinder</RootNamespace>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <Version>1.1.0</Version>
+    <Version>1.2.0</Version>
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- Jellyfin 10.11.x targets net9.0 -->
-    <PackageReference Include="Jellyfin.Controller" Version="10.11.*" />
-    <PackageReference Include="Jellyfin.Model" Version="10.11.*" />
+    <!-- Jellyfin 12.0.x targets net10.0 -->
+    <PackageReference Include="Jellyfin.Controller" Version="12.0.0-rc1" />
+    <PackageReference Include="Jellyfin.Model" Version="12.0.0-rc1" />
   </ItemGroup>
 
   <ItemGroup>

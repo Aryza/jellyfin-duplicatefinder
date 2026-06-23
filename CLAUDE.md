@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 dotnet build -c Release
 ```
 
-Output: `bin/Release/net9.0/Jellyfin.Plugin.DuplicateFinder.dll`
+Output: `bin/Release/net10.0/Jellyfin.Plugin.DuplicateFinder.dll`
 
 ## Test
 
@@ -20,7 +20,7 @@ dotnet test tests/Jellyfin.Plugin.DuplicateFinder.Tests/
 
 ## Architecture
 
-This is a Jellyfin 10.11.x plugin targeting `net9.0`. The plugin is loaded by Jellyfin's plugin host, which provides dependency injection for `ILibraryManager`, `ILogger<T>`, etc.
+This is a Jellyfin 12.0.x plugin targeting `net10.0`. The plugin is loaded by Jellyfin's plugin host, which provides dependency injection for `ILibraryManager`, `ILogger<T>`, etc.
 
 **Data flow for a scan:**
 
